@@ -4,7 +4,7 @@ import { healthCheck } from "../controllers/health.controller";
 const router = Router();
 
 /**
- * @openapi
+ * @swagger
  * /health:
  *   get:
  *     summary: Health check
@@ -23,6 +23,10 @@ const router = Router();
  *                 timestamp: { type: string, format: date-time }
  *       503:
  *         description: Database unreachable
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get("/", healthCheck);
 

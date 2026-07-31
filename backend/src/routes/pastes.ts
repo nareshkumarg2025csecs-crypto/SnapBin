@@ -7,7 +7,7 @@ import { createPasteSchema, listPastesSchema } from "../utils/schemas";
 const router = Router();
 
 /**
- * @openapi
+ * @swagger
  * /pastes:
  *   post:
  *     summary: Create a new paste
@@ -27,13 +27,21 @@ const router = Router();
  *               $ref: '#/components/schemas/CreatePasteResponse'
  *       422:
  *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       429:
  *         description: Rate limit exceeded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post("/", createPasteRateLimiter, validate(createPasteSchema), createPaste);
 
 /**
- * @openapi
+ * @swagger
  * /pastes:
  *   get:
  *     summary: List public pastes
@@ -51,11 +59,35 @@ router.post("/", createPasteRateLimiter, validate(createPasteSchema), createPast
  *     responses:
  *       200:
  *         description: Paginated list of public pastes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     pastes:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Paste'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         page: { type: integer, example: 1 }
+ *                         limit: { type: integer, example: 20 }
+ *                         total: { type: integer, example: 100 }
+ *                         totalPages: { type: integer, example: 5 }
+ *                         hasNext: { type: boolean, example: true }
+ *                         hasPrev: { type: boolean, example: false }
  */
 router.get("/", validate(listPastesSchema, "query"), listPastes);
 
 /**
- * @openapi
+ * @swagger
  * /pastes/{id}:
  *   get:
  *     summary: Get a paste by ID
@@ -68,15 +100,39 @@ router.get("/", validate(listPastesSchema, "query"), listPastes);
  *     responses:
  *       200:
  *         description: Paste retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     paste:
+ *                       $ref: '#/components/schemas/Paste'
+ *                     burned:
+ *                       type: boolean
+ *                       example: false
  *       404:
  *         description: Paste not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       410:
  *         description: Paste expired
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get("/:id", getPaste);
 
 /**
- * @openapi
+ * @swagger
  * /pastes/{id}:
  *   delete:
  *     summary: Delete a paste using delete token
@@ -93,10 +149,31 @@ router.get("/:id", getPaste);
  *     responses:
  *       200:
  *         description: Paste deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: ok }
+ *                 message: { type: string, example: Paste deleted successfully }
+ *       400:
+ *         description: Missing delete token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       403:
  *         description: Invalid delete token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Paste not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.delete("/:id", deletePaste);
 

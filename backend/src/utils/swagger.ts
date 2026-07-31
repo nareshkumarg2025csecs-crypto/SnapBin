@@ -9,8 +9,8 @@ const options: swaggerJsdoc.Options = {
       description:
         "REST API for SnapBin — a production-grade pastebin service. Create, share, and manage code snippets with expiry, burn-after-read, and syntax highlighting.",
       contact: {
-        name: "SnapBin",
-        url: "https://github.com/snapbin",
+        name: "SnapBin - Website",
+        url: "https://snapbin.vercel.app/",
       },
     },
     servers: [
@@ -73,7 +73,12 @@ const options: swaggerJsdoc.Options = {
       },
     },
   },
-  apis: ["./src/routes/*.ts"],
+  apis: [
+    "./src/routes/**/*.ts",
+    "./dist/routes/**/*.js",
+    "./src/controllers/**/*.ts",
+    "./dist/controllers/**/*.js"
+  ],
 };
 
 export const swaggerSpec = swaggerJsdoc(options);
