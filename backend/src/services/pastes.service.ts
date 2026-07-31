@@ -44,7 +44,18 @@ export async function createPaste(input: CreatePasteInput) {
 
   logger.info({ id: paste.id, status: "SUCCESS" }, "Database insertion status: SUCCESS");
 
-  return { id: paste.id, deleteToken };
+  return {
+    id: paste.id,
+    title: paste.title,
+    content: paste.content,
+    language: paste.language,
+    createdAt: paste.createdAt,
+    expiresAt: paste.expiresAt,
+    viewCount: paste.viewCount,
+    burnAfterRead: paste.burnAfterRead,
+    visibility: paste.visibility as "public" | "unlisted",
+    deleteToken,
+  };
 }
 
 export async function getPasteById(id: string) {

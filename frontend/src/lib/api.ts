@@ -60,8 +60,7 @@ export interface CreatePastePayload {
   burnAfterRead?: boolean;
 }
 
-export interface CreatePasteResult {
-  id: string;
+export interface CreatePasteResult extends Paste {
   deleteToken: string;
 }
 

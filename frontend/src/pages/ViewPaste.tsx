@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import Editor from "@monaco-editor/react";
 import toast from "react-hot-toast";
@@ -58,11 +58,14 @@ async function fetchWithRetry(id: string, maxRetries = 2): Promise<{ paste: Past
 export default function ViewPaste() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { remove, loading: deleting } = useDeletePaste();
   const cancelledRef = useRef(false);
 
-  const [paste, setPaste] = useState<Paste | null>(null);
-  const [loading, setLoading] = useState(true);
+  const statePaste = location.state?.paste as Paste | undefined;
+
+  const [paste, setPaste] = useState<Paste | null>(statePaste && statePaste.id === id ? statePaste : null);
+  const [loading, setLoading] = useState(!statePaste || statePaste.id !== id);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [burned, setBurned] = useState(false);
@@ -73,6 +76,16 @@ export default function ViewPaste() {
 
   useEffect(() => {
     if (!id) return;
+
+    if (location.state?.paste && (location.state.paste as Paste).id === id) {
+      setPaste(location.state.paste as Paste);
+      setLoading(false);
+      setError(null);
+      setErrorCode(null);
+      setBurned(false);
+      return;
+    }
+
     cancelledRef.current = false;
     setLoading(true);
     setError(null);
@@ -104,7 +117,7 @@ export default function ViewPaste() {
     return () => {
       cancelledRef.current = true;
     };
-  }, [id]);
+  }, [id, location.state]);
 
   const handleCopy = async () => {
     if (!paste) return;

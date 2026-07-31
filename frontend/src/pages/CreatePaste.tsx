@@ -71,7 +71,7 @@ export default function CreatePaste() {
 
       console.log("[CreatePaste] Navigating to:", `/paste/${response.id}`);
       toast.success("Paste created successfully!", { id: toastId });
-      navigate(`/paste/${response.id}`);
+      navigate(`/paste/${response.id}`, { state: { paste: response } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to create paste";
       console.error("[CreatePaste] Exception caught during creation:", err);

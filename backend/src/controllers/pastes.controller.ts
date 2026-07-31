@@ -16,10 +16,7 @@ export async function createPaste(
 
     logger.info({ id: result.id, deleteToken: result.deleteToken }, "API response payload generated");
 
-    res.status(201).json({
-      id: result.id,
-      deleteToken: result.deleteToken,
-    });
+    res.status(201).json(result);
   } catch (err) {
     logger.error({ err }, "Failed to create paste");
     next(err);
