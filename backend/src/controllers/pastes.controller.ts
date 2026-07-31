@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import * as pastesService from "../services/pastes.service";
-import { CreatePasteInput, ListPastesInput } from "../utils/schemas";
+import { CreatePasteInput, ListPastesInput, UpdatePasteInput } from "../utils/schemas";
 import { logger } from "../utils/logger";
 
 export async function createPaste(
@@ -30,9 +30,10 @@ export async function getPaste(
 ): Promise<void> {
   try {
     const { id } = req.params;
+    const viewPassword = req.headers["x-view-password"] as string | undefined;
     logger.info({ id }, "Paste retrieval request");
 
-    const result = await pastesService.getPasteById(id);
+    const result = await pastesService.getPasteById(id, viewPassword);
 
     logger.info({ id, burned: result.burned, viewCount: result.paste.viewCount }, "Paste retrieved successfully");
 
@@ -59,6 +60,30 @@ export async function listPastes(
       data: result,
     });
   } catch (err) {
+    next(err);
+  }
+}
+
+export async function updatePaste(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    const input = req.body as UpdatePasteInput;
+    logger.info({ id }, "Paste update request");
+
+    const result = await pastesService.updatePaste(id, input);
+
+    logger.info({ id }, "Paste updated successfully");
+
+    res.status(200).json({
+      status: "ok",
+      data: result,
+    });
+  } catch (err) {
+    logger.error({ err, id: req.params.id }, "Failed to update paste");
     next(err);
   }
 }

@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { createPaste, getPaste, listPastes, deletePaste } from "../controllers/pastes.controller";
+import { createPaste, getPaste, listPastes, deletePaste, updatePaste } from "../controllers/pastes.controller";
 import { validate } from "../middleware/validate";
 import { createPasteRateLimiter } from "../middleware/rateLimiter";
-import { createPasteSchema, listPastesSchema } from "../utils/schemas";
+import { createPasteSchema, listPastesSchema, updatePasteSchema } from "../utils/schemas";
 
 const router = Router();
 
@@ -97,6 +97,10 @@ router.get("/", validate(listPastesSchema, "query"), listPastes);
  *         name: id
  *         required: true
  *         schema: { type: string }
+ *       - in: header
+ *         name: X-View-Password
+ *         schema: { type: string }
+ *         description: Optional view password if paste is protected
  *     responses:
  *       200:
  *         description: Paste retrieved
@@ -116,6 +120,12 @@ router.get("/", validate(listPastesSchema, "query"), listPastes);
  *                     burned:
  *                       type: boolean
  *                       example: false
+ *       401:
+ *         description: View password required or incorrect
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Paste not found
  *         content:
@@ -130,6 +140,61 @@ router.get("/", validate(listPastesSchema, "query"), listPastes);
  *               $ref: '#/components/schemas/Error'
  */
 router.get("/:id", getPaste);
+
+/**
+ * @swagger
+ * /pastes/{id}:
+ *   put:
+ *     summary: Update a paste in place using edit password
+ *     tags: [Pastes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [editPassword]
+ *             properties:
+ *               title: { type: string }
+ *               content: { type: string }
+ *               language: { type: string }
+ *               editPassword: { type: string }
+ *     responses:
+ *       200:
+ *         description: Paste updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: ok }
+ *                 data:
+ *                   $ref: '#/components/schemas/Paste'
+ *       401:
+ *         description: Incorrect edit password
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Paste is not editable
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Paste not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.put("/:id", validate(updatePasteSchema), updatePaste);
 
 /**
  * @swagger

@@ -9,14 +9,18 @@ datasource db {
 }
 
 model Paste {
-  id            String    @id
-  title         String    @default("Untitled Paste")
-  content       String
-  language      String    @default("plaintext")
-  createdAt     DateTime  @default(now())
-  expiresAt     DateTime?
-  viewCount     Int       @default(0)
-  burnAfterRead Boolean   @default(false)
-  visibility    String    @default("public")
-  deleteToken   String
+  id               String    @id
+  title            String    @default("Untitled Paste")
+  content          String
+  language         String    @default("plaintext")
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime?
+  viewCount        Int       @default(0)
+  burnAfterRead    Boolean   @default(false)
+  visibility       String    @default("public")
+  deleteToken      String
+  viewPasswordHash String?
+  editPasswordHash String?
+  hasViewPassword  Boolean   @default(false)
+  hasEditPassword  Boolean   @default(false)
 }

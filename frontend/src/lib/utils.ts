@@ -68,7 +68,7 @@ const DELETE_TOKEN_PREFIX = "snapbin_dt_";
 export function saveDeleteToken(pasteId: string, token: string): void {
   try {
     localStorage.setItem(`${DELETE_TOKEN_PREFIX}${pasteId}`, token);
-  } catch { /* localStorage unavailable (private mode) */ }
+  } catch {}
 }
 
 export function getDeleteToken(pasteId: string): string | null {
@@ -82,7 +82,7 @@ export function getDeleteToken(pasteId: string): string | null {
 export function removeDeleteToken(pasteId: string): void {
   try {
     localStorage.removeItem(`${DELETE_TOKEN_PREFIX}${pasteId}`);
-  } catch { /* localStorage unavailable (private mode) */ }
+  } catch {}
 }
 
 export const LANGUAGE_LABELS: Record<string, string> = {
