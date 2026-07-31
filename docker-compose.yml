@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: snapbin-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: snapbin
+      POSTGRES_PASSWORD: snapbin_pass
+      POSTGRES_DB: snapbin_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U snapbin -d snapbin_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: snapbin-backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://snapbin:snapbin_pass@postgres:5432/snapbin_db?schema=public
+      PORT: 3001
+      NODE_ENV: production
+      LOG_LEVEL: info
+      CORS_ORIGIN: "*"
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "npx prisma db push --schema=src/prisma/schema.prisma && node dist/index.js"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: snapbin-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
