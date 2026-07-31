@@ -41,90 +41,62 @@ const monacoLangMap: Record<string, string> = {
   dockerfile: "dockerfile", xml: "xml",
 };
 
-async function fetchWithRetry(id: string, viewPassword?: string, maxRetries = 2): Promise<{ paste: Paste; burned: boolean }> {
-  let lastErr: Error = new Error("Unknown error");
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await pastesApi.getById(id, viewPassword);
-    } catch (err) {
-      lastErr = err instanceof Error ? err : new Error(String(err));
-      const status = (err as Error & { status?: number }).status;
-      const code = (err as Error & { code?: string }).code;
-      if (status === 401 || code === "PASTE_NOT_FOUND" || code === "PASTE_EXPIRED") {
-        throw lastErr;
-      }
-      if (attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
-      }
-    }
-  }
-  throw lastErr;
-}
-
 export default function ViewPaste() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const { remove, loading: deleting } = useDeletePaste();
   const cancelledRef = useRef(false);
-  const lastFetchedIdRef = useRef<string | null>(null);
+  const fetchedRef = useRef(false);
 
-  const statePaste = location.state?.paste as Paste | undefined;
-
-  const [paste, setPaste] = useState<Paste | null>(statePaste && statePaste.id === id ? statePaste : null);
-  const [loading, setLoading] = useState(!statePaste || statePaste.id !== id);
+  const [paste, setPaste] = useState<Paste | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [burned, setBurned] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
 
+  const [needsViewPassword, setNeedsViewPassword] = useState(false);
   const [viewPasswordInput, setViewPasswordInput] = useState("");
-  const [showViewPasswordPrompt, setShowViewPasswordPrompt] = useState(false);
   const [viewPasswordError, setViewPasswordError] = useState<string | null>(null);
+  const [showViewPasswordText, setShowViewPasswordText] = useState(false);
+  const [verifyingViewPw, setVerifyingViewPw] = useState(false);
+
+  const [showEditPrompt, setShowEditPrompt] = useState(false);
+  const [editPasswordInput, setEditPasswordInput] = useState("");
+  const [editPasswordError, setEditPasswordError] = useState<string | null>(null);
+  const [verifyingEditPw, setVerifyingEditPw] = useState(false);
+  const [showEditPasswordText, setShowEditPasswordText] = useState(false);
+  const [verifiedEditPassword, setVerifiedEditPassword] = useState<string | null>(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editLanguage, setEditLanguage] = useState("");
-  const [showEditPasswordPrompt, setShowEditPasswordPrompt] = useState(false);
-  const [editPasswordInput, setEditPasswordInput] = useState("");
-  const [editPasswordError, setEditPasswordError] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
-  const [showViewPasswordToggle, setShowViewPasswordToggle] = useState(false);
-  const [showEditPasswordToggle, setShowEditPasswordToggle] = useState(false);
 
   const deleteToken = id ? getDeleteToken(id) : null;
   const canDelete = !!deleteToken;
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || fetchedRef.current) return;
+    fetchedRef.current = true;
+    cancelledRef.current = false;
 
-    if (location.state?.paste && (location.state.paste as Paste).id === id) {
-      const p = location.state.paste as Paste;
-      setPaste(p);
-      setEditTitle(p.title);
-      setEditContent(p.content);
-      setEditLanguage(p.language);
+    const statePaste = location.state?.paste as Paste | undefined;
+
+    if (statePaste && statePaste.id === id && !statePaste.hasViewPassword) {
+      setPaste(statePaste);
+      setEditTitle(statePaste.title);
+      setEditContent(statePaste.content);
+      setEditLanguage(statePaste.language);
       setLoading(false);
-      setError(null);
-      setErrorCode(null);
-      setBurned(false);
       return;
     }
 
-    if (lastFetchedIdRef.current === id) return;
-    lastFetchedIdRef.current = id;
-
-    cancelledRef.current = false;
     setLoading(true);
-    setError(null);
-    setErrorCode(null);
-    setPaste(null);
-    setBurned(false);
-    setShowViewPasswordPrompt(false);
-    setViewPasswordError(null);
 
-    fetchWithRetry(id)
+    pastesApi.getById(id)
       .then(({ paste: p, burned: b }) => {
         if (cancelledRef.current) return;
         setPaste(p);
@@ -139,11 +111,11 @@ export default function ViewPaste() {
       .catch((err: Error & { code?: string; status?: number }) => {
         if (cancelledRef.current) return;
         if (err.status === 401) {
-          setShowViewPasswordPrompt(true);
+          setNeedsViewPassword(true);
         } else {
           setError(err.message);
-          setErrorCode(err.code ?? null);
-          if (err.code === "PASTE_EXPIRED") {
+          setErrorCode((err as any).code ?? null);
+          if ((err as any).code === "PASTE_EXPIRED") {
             toast.error("This paste has expired.");
           }
         }
@@ -155,68 +127,133 @@ export default function ViewPaste() {
     return () => {
       cancelledRef.current = true;
     };
-  }, [id, location.state]);
+  }, [id]);
 
   const handleVerifyViewPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id) return;
-    setLoading(true);
+    if (!id || !viewPasswordInput.trim()) return;
+    setVerifyingViewPw(true);
     setViewPasswordError(null);
 
     try {
-      const { paste: p, burned: b } = await fetchWithRetry(id, viewPasswordInput);
+      const { paste: p, burned: b } = await pastesApi.getById(id, viewPasswordInput);
       setPaste(p);
       setEditTitle(p.title);
       setEditContent(p.content);
       setEditLanguage(p.language);
       setBurned(b);
-      setShowViewPasswordPrompt(false);
+      setNeedsViewPassword(false);
       if (b) {
         toast("This paste was consumed and deleted.", { icon: "🔥" });
       }
     } catch (err: any) {
-      setViewPasswordError(err.message || "Incorrect password");
+      const code = err.code ?? "";
+      if (code === "VIEW_PASSWORD_REQUIRED" || code === "INVALID_VIEW_PASSWORD" || err.status === 401) {
+        setViewPasswordError("Incorrect password. Please try again.");
+      } else {
+        setViewPasswordError(err.message || "Failed to unlock paste.");
+      }
     } finally {
-      setLoading(false);
+      setVerifyingViewPw(false);
     }
   };
 
-  const handleVerifyEditPassword = (e: React.FormEvent) => {
+  const handleOpenEditPrompt = () => {
+    setEditPasswordInput("");
+    setEditPasswordError(null);
+    setShowEditPrompt(true);
+  };
+
+  const handleVerifyEditPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editPasswordInput) {
-      setEditPasswordError("Password is required");
+    if (!id || !editPasswordInput.trim()) {
+      setEditPasswordError("Password is required.");
       return;
     }
+    if (!paste) return;
+
+    setVerifyingEditPw(true);
     setEditPasswordError(null);
-    setShowEditPasswordPrompt(false);
-    setIsEditing(true);
+
+    try {
+      const updated = await pastesApi.update(id, {
+        title: paste.title,
+        content: paste.content,
+        language: paste.language,
+        editPassword: editPasswordInput,
+      });
+      setPaste(updated);
+      setEditTitle(updated.title);
+      setEditContent(updated.content);
+      setEditLanguage(updated.language);
+      setVerifiedEditPassword(editPasswordInput);
+      setShowEditPrompt(false);
+      setIsEditing(true);
+    } catch (err: any) {
+      const code = err.code ?? "";
+      if (code === "INVALID_EDIT_PASSWORD" || err.status === 401) {
+        setEditPasswordError("Incorrect edit password.");
+      } else if (code === "PASTE_NOT_EDITABLE" || err.status === 403) {
+        setEditPasswordError("This paste cannot be edited.");
+        setShowEditPrompt(false);
+      } else {
+        setEditPasswordError(err.message || "Verification failed.");
+      }
+    } finally {
+      setVerifyingEditPw(false);
+    }
   };
 
   const handleSaveEdit = async () => {
-    if (!id) return;
+    if (!id || !paste) return;
     if (!editContent.trim()) {
       toast.error("Content cannot be empty");
       return;
     }
+    if (!verifiedEditPassword) {
+      toast.error("Edit session expired. Please re-authenticate.");
+      setIsEditing(false);
+      setShowEditPrompt(true);
+      return;
+    }
     setSavingEdit(true);
-    setEditPasswordError(null);
 
     try {
       const updated = await pastesApi.update(id, {
         title: editTitle,
         content: editContent,
         language: editLanguage,
-        editPassword: editPasswordInput,
+        editPassword: verifiedEditPassword,
       });
       setPaste(updated);
+      setEditTitle(updated.title);
+      setEditContent(updated.content);
+      setEditLanguage(updated.language);
       setIsEditing(false);
+      setVerifiedEditPassword(null);
       toast.success("Changes saved successfully!");
     } catch (err: any) {
-      setEditPasswordError(err.message || "Failed to save changes");
-      setIsEditing(false);
-      setShowEditPasswordPrompt(true);
+      const code = err.code ?? "";
+      if (code === "INVALID_EDIT_PASSWORD" || err.status === 401) {
+        toast.error("Edit password rejected by server. Please re-authenticate.");
+        setIsEditing(false);
+        setVerifiedEditPassword(null);
+        setShowEditPrompt(true);
+      } else {
+        toast.error(err.message || "Failed to save changes");
+      }
     } finally {
       setSavingEdit(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setVerifiedEditPassword(null);
+    if (paste) {
+      setEditTitle(paste.title);
+      setEditContent(paste.content);
+      setEditLanguage(paste.language);
     }
   };
 
@@ -259,41 +296,58 @@ export default function ViewPaste() {
     );
   }
 
-  if (showViewPasswordPrompt) {
+  if (needsViewPassword) {
     return (
-      <div style={{ maxWidth: "400px", margin: "80px auto 0", padding: "24px", textAlign: "center" }} className="card">
-        <div style={{ width: "48px", height: "48px", borderRadius: "12px", backgroundColor: "rgba(193,81,45,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-          <Lock size={20} style={{ color: "#C1512D" }} />
-        </div>
-        <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#111111", marginBottom: "8px" }}>Password Protected</h2>
-        <p style={{ fontSize: "14px", color: "#6B6560", marginBottom: "20px" }}>This paste requires a view password to unlock.</p>
-        <form onSubmit={handleVerifyViewPassword}>
-          <div style={{ position: "relative", marginBottom: "16px" }}>
-            <input
-              type={showViewPasswordToggle ? "text" : "password"}
-              placeholder="Enter password"
-              value={viewPasswordInput}
-              onChange={(e) => setViewPasswordInput(e.target.value)}
-              className="input-field"
-              style={{ paddingRight: "40px" }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowViewPasswordToggle(!showViewPasswordToggle)}
-              style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#6B6560", display: "flex", alignItems: "center" }}
-            >
-              {showViewPasswordToggle ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh", padding: "24px" }}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="card"
+          style={{ width: "100%", maxWidth: "400px", padding: "32px", textAlign: "center" }}
+        >
+          <div style={{ width: "56px", height: "56px", borderRadius: "14px", backgroundColor: "rgba(193,81,45,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+            <Lock size={24} style={{ color: "#C1512D" }} />
           </div>
-          {viewPasswordError && (
-            <p style={{ fontSize: "13px", color: "#ef4444", margin: "-8px 0 16px", textAlign: "left" }}>
-              {viewPasswordError}
-            </p>
-          )}
-          <button type="submit" className="btn-primary" style={{ width: "100%", justifyContent: "center" }}>
-            Unlock Paste
-          </button>
-        </form>
+          <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#111111", marginBottom: "8px" }}>Password Protected</h2>
+          <p style={{ fontSize: "14px", color: "#6B6560", marginBottom: "24px", lineHeight: 1.6 }}>
+            This paste requires a password to view its contents.
+          </p>
+          <form onSubmit={handleVerifyViewPassword}>
+            <div style={{ position: "relative", marginBottom: "12px" }}>
+              <input
+                id="view-password-unlock-input"
+                type={showViewPasswordText ? "text" : "password"}
+                placeholder="Enter view password"
+                value={viewPasswordInput}
+                onChange={(e) => setViewPasswordInput(e.target.value)}
+                autoFocus
+                className="input-field"
+                style={{ paddingRight: "44px", textAlign: "left" }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowViewPasswordText(!showViewPasswordText)}
+                style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#6B6560", display: "flex", alignItems: "center" }}
+              >
+                {showViewPasswordText ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {viewPasswordError && (
+              <p style={{ fontSize: "13px", color: "#ef4444", marginBottom: "12px", textAlign: "left" }}>
+                {viewPasswordError}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={verifyingViewPw || !viewPasswordInput.trim()}
+              className="btn-primary"
+              style={{ width: "100%", justifyContent: "center" }}
+            >
+              {verifyingViewPw ? <><Loader2 size={14} className="animate-spin" /> Verifying...</> : "Unlock Paste"}
+            </button>
+          </form>
+        </motion.div>
       </div>
     );
   }
@@ -371,9 +425,7 @@ export default function ViewPaste() {
                   style={{ width: "150px", fontSize: "13px", padding: "4px 8px", height: "auto" }}
                 >
                   {Object.keys(monacoLangMap).map((lang) => (
-                    <option key={lang} value={lang}>
-                      {lang}
-                    </option>
+                    <option key={lang} value={lang}>{lang}</option>
                   ))}
                 </select>
               ) : (
@@ -400,7 +452,7 @@ export default function ViewPaste() {
               <button onClick={handleSaveEdit} disabled={savingEdit} className="btn-primary" style={{ fontSize: "13px", padding: "8px 14px" }}>
                 {savingEdit ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save Changes
               </button>
-              <button onClick={() => setIsEditing(false)} className="btn-ghost" style={{ fontSize: "13px", padding: "8px 14px" }}>
+              <button onClick={handleCancelEdit} className="btn-ghost" style={{ fontSize: "13px", padding: "8px 14px" }}>
                 <X size={13} /> Cancel
               </button>
             </>
@@ -424,7 +476,7 @@ export default function ViewPaste() {
                 <FileText size={13} /> {showRaw ? "Rendered" : "Raw"}
               </button>
               {paste.hasEditPassword && (
-                <button onClick={() => setShowEditPasswordPrompt(true)} className="btn-ghost" style={{ fontSize: "13px", padding: "8px 14px" }}>
+                <button id="edit-paste-btn" onClick={handleOpenEditPrompt} className="btn-ghost" style={{ fontSize: "13px", padding: "8px 14px" }}>
                   <Edit2 size={13} /> Edit
                 </button>
               )}
@@ -443,36 +495,66 @@ export default function ViewPaste() {
           )}
         </div>
 
-        {showEditPasswordPrompt && (
-          <div style={{ maxWidth: "400px", margin: "20px 0", padding: "24px" }} className="card">
-            <h3 style={{ fontSize: "16px", fontWeight: 700, color: "#111111", marginBottom: "8px" }}>Enter Edit Password</h3>
+        {showEditPrompt && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="card"
+            style={{ maxWidth: "400px", margin: "0 0 20px", padding: "24px" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+              <div style={{ width: "36px", height: "36px", borderRadius: "8px", backgroundColor: "rgba(193,81,45,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Lock size={16} style={{ color: "#C1512D" }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#111111", margin: 0 }}>Verify Edit Password</h3>
+                <p style={{ fontSize: "12px", color: "#6B6560", margin: 0, marginTop: "2px" }}>Password is verified server-side before editing is enabled.</p>
+              </div>
+            </div>
             <form onSubmit={handleVerifyEditPassword}>
               <div style={{ position: "relative", marginBottom: "12px" }}>
                 <input
-                  type={showEditPasswordToggle ? "text" : "password"}
-                  placeholder="Password"
+                  id="edit-password-verify-input"
+                  type={showEditPasswordText ? "text" : "password"}
+                  placeholder="Edit password"
                   value={editPasswordInput}
                   onChange={(e) => setEditPasswordInput(e.target.value)}
+                  autoFocus
                   className="input-field"
-                  style={{ paddingRight: "40px" }}
+                  style={{ paddingRight: "44px" }}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowEditPasswordToggle(!showEditPasswordToggle)}
+                  onClick={() => setShowEditPasswordText(!showEditPasswordText)}
                   style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#6B6560", display: "flex", alignItems: "center" }}
                 >
-                  {showEditPasswordToggle ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showEditPasswordText ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
               {editPasswordError && (
                 <p style={{ fontSize: "13px", color: "#ef4444", marginBottom: "12px" }}>{editPasswordError}</p>
               )}
               <div style={{ display: "flex", gap: "8px" }}>
-                <button type="submit" className="btn-primary" style={{ flex: 1, justifyContent: "center" }}>Verify</button>
-                <button type="button" onClick={() => setShowEditPasswordPrompt(false)} className="btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancel</button>
+                <button
+                  type="submit"
+                  disabled={verifyingEditPw || !editPasswordInput.trim()}
+                  className="btn-primary"
+                  style={{ flex: 1, justifyContent: "center" }}
+                >
+                  {verifyingEditPw ? <><Loader2 size={13} className="animate-spin" /> Verifying...</> : "Unlock Editor"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowEditPrompt(false); setEditPasswordError(null); }}
+                  className="btn-ghost"
+                  style={{ flex: 1, justifyContent: "center" }}
+                >
+                  Cancel
+                </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         )}
 
         <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid #E5E1D8" }}>
@@ -487,16 +569,14 @@ export default function ViewPaste() {
                   <div key={c} style={{ width: "12px", height: "12px", borderRadius: "50%", backgroundColor: c }} />
                 ))}
                 <span style={{ fontSize: "12px", fontFamily: "JetBrains Mono, monospace", color: "#6B6560", marginLeft: "8px" }}>
-                  {isEditing ? "Editing: " : ""}{paste.title}
+                  {isEditing ? "Editing — " : ""}{paste.title}
                 </span>
               </div>
               <Editor
                 height="520px"
                 language={monacoLangMap[isEditing ? editLanguage : paste.language] ?? "plaintext"}
                 value={isEditing ? editContent : paste.content}
-                onChange={(val) => {
-                  if (isEditing) setEditContent(val ?? "");
-                }}
+                onChange={(val) => { if (isEditing) setEditContent(val ?? ""); }}
                 theme="vs"
                 options={{
                   readOnly: !isEditing,
