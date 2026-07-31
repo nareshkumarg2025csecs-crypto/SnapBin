@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { Zap, Github, ExternalLink } from "lucide-react";
 
+const apiDocsUrl = `${(import.meta.env.VITE_API_URL as string || "").replace(/\/api$/, "")}/api/docs`;
+
 export default function Footer() {
   return (
     <footer style={{ borderTop: "1px solid #E5E1D8", backgroundColor: "#F7F5F1" }}>
@@ -34,7 +36,7 @@ export default function Footer() {
                 </li>
               ))}
               <li>
-                <a href="/api/docs" target="_blank" rel="noopener noreferrer" style={{ fontSize: "14px", color: "#6B6560", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <a href={apiDocsUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "14px", color: "#6B6560", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                   API Docs <ExternalLink size={10} />
                 </a>
               </li>
@@ -47,7 +49,7 @@ export default function Footer() {
             </p>
             <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "10px" }}>
               <li>
-                <a href="https://github.com" target="_blank" rel="noopener noreferrer" style={{ fontSize: "14px", color: "#6B6560", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <a href="https://github.com/nareshkumarg2025csecs-crypto/SnapBin" target="_blank" rel="noopener noreferrer" style={{ fontSize: "14px", color: "#6B6560", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
                   <Github size={13} /> GitHub
                 </a>
               </li>

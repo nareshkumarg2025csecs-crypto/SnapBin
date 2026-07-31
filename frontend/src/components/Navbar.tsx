@@ -7,12 +7,14 @@ export default function Navbar() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const apiDocsUrl = `${(import.meta.env.VITE_API_URL as string || "").replace(/\/api$/, "")}/api/docs`;
+
   const navLinks = [
     { to: "/", label: "Home" },
     { to: "/create", label: "Create Paste" },
     { to: "/browse", label: "Browse" },
-    { to: "/api/docs", label: "API Docs", external: true },
-    { to: "https://github.com", label: "GitHub", external: true, icon: <Github size={15} /> },
+    { to: apiDocsUrl, label: "API Docs", external: true },
+    { to: "https://github.com/nareshkumarg2025csecs-crypto/SnapBin", label: "GitHub", external: true, icon: <Github size={15} /> },
   ];
 
   return (
