@@ -10,11 +10,22 @@ export async function createPaste(
 ): Promise<void> {
   try {
     const input = req.body as CreatePasteInput;
-    logger.info({ payload: input }, "Paste creation request payload");
+
+    logger.info({
+      payload: {
+        title: input.title,
+        language: input.language,
+        expiration: input.expiration,
+        visibility: input.visibility,
+        burnAfterRead: input.burnAfterRead,
+        hasViewPassword: !!input.viewPassword,
+        hasEditPassword: !!input.editPassword,
+      },
+    }, "Paste creation request payload");
 
     const result = await pastesService.createPaste(input);
 
-    logger.info({ id: result.id, deleteToken: result.deleteToken }, "API response payload generated");
+    logger.info({ id: result.id }, "Paste created successfully");
 
     res.status(201).json(result);
   } catch (err) {
@@ -31,7 +42,7 @@ export async function getPaste(
   try {
     const { id } = req.params;
     const viewPassword = req.headers["x-view-password"] as string | undefined;
-    logger.info({ id }, "Paste retrieval request");
+    logger.info({ id, hasViewPassword: !!viewPassword }, "Paste retrieval request");
 
     const result = await pastesService.getPasteById(id, viewPassword);
 
@@ -72,7 +83,7 @@ export async function updatePaste(
   try {
     const { id } = req.params;
     const input = req.body as UpdatePasteInput;
-    logger.info({ id }, "Paste update request");
+    logger.info({ id, hasEditPassword: !!input.editPassword }, "Paste update request");
 
     const result = await pastesService.updatePaste(id, input);
 
