@@ -17,8 +17,8 @@ app.set("trust proxy", 1);
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN ?? "*",
-    methods: ["GET", "POST", "DELETE"],
-    allowedHeaders: ["Content-Type", "X-Delete-Token"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "X-Delete-Token", "X-View-Password"],
   })
 );
 
