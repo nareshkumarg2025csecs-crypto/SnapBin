@@ -74,9 +74,6 @@ export default function ViewPaste() {
         if (cancelled) return;
         setPaste(p);
         setBurned(b);
-        if (b) {
-          toast("This paste was consumed and deleted.", { icon: "🔥" });
-        }
       })
       .catch((err: Error & { code?: string; status?: number }) => {
         if (cancelled) return;
@@ -134,6 +131,25 @@ export default function ViewPaste() {
     );
   }
 
+  if (errorCode === "PASTE_ALREADY_CONSUMED") {
+    return (
+      <div style={{ maxWidth: "480px", margin: "0 auto", padding: "80px 24px", textAlign: "center" }}>
+        <div style={{ width: "64px", height: "64px", borderRadius: "16px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", backgroundColor: "rgba(193,81,45,0.1)" }}>
+          <Flame size={32} style={{ color: "#C1512D" }} />
+        </div>
+        <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#111111", marginBottom: "12px" }}>
+          Paste already consumed
+        </h1>
+        <p style={{ fontSize: "14px", color: "#6B6560", marginBottom: "32px", lineHeight: 1.6 }}>
+          This burn-after-read paste was already viewed and permanently deleted. It cannot be accessed again.
+        </p>
+        <Link to="/create" className="btn-primary">
+          Create Your Own
+        </Link>
+      </div>
+    );
+  }
+
   if (error || !paste) {
     const isExpired = errorCode === "PASTE_EXPIRED";
     const isNotFound = errorCode === "PASTE_NOT_FOUND";
@@ -155,28 +171,34 @@ export default function ViewPaste() {
     );
   }
 
-  if (burned) {
-    return (
-      <div style={{ maxWidth: "480px", margin: "0 auto", padding: "80px 24px", textAlign: "center" }}>
-        <div style={{ width: "64px", height: "64px", borderRadius: "16px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", backgroundColor: "rgba(193,81,45,0.1)" }}>
-          <Flame size={32} style={{ color: "#C1512D" }} />
-        </div>
-        <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#111111", marginBottom: "12px" }}>
-          Paste consumed
-        </h1>
-        <p style={{ fontSize: "14px", color: "#6B6560", marginBottom: "32px", lineHeight: 1.6 }}>
-          This was a burn-after-read paste. It has been permanently deleted after your first view.
-        </p>
-        <Link to="/create" className="btn-primary">
-          Create Your Own
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="container-app" style={{ paddingTop: "40px", paddingBottom: "40px" }}>
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+
+        {burned && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "12px",
+              padding: "14px 18px",
+              marginBottom: "24px",
+              borderRadius: "12px",
+              backgroundColor: "rgba(193,81,45,0.07)",
+              border: "1px solid rgba(193,81,45,0.25)",
+            }}
+          >
+            <Flame size={16} style={{ color: "#C1512D", flexShrink: 0, marginTop: "2px" }} />
+            <p style={{ fontSize: "13px", color: "#8B3520", lineHeight: 1.6, margin: 0 }}>
+              <strong style={{ fontWeight: 700 }}>Burn-after-read — </strong>
+              this paste has been permanently deleted from the server. This is the only time it can be viewed.
+            </p>
+          </motion.div>
+        )}
+
         <div style={{ display: "flex", alignItems: "flex-start", gap: "16px", marginBottom: "24px", flexWrap: "wrap" }}>
           <button
             onClick={() => navigate(-1)}
@@ -190,15 +212,22 @@ export default function ViewPaste() {
             </h1>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px" }}>
               <LanguageBadge language={paste.language} />
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "13px", color: "#6B6560" }}>
-                <Eye size={13} /> {paste.viewCount.toLocaleString()} views
-              </span>
+              {!burned && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "13px", color: "#6B6560" }}>
+                  <Eye size={13} /> {paste.viewCount.toLocaleString()} views
+                </span>
+              )}
               <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "13px", color: "#6B6560" }}>
                 <Clock size={13} /> {formatDate(paste.createdAt)}
               </span>
               {paste.expiresAt && (
                 <span style={{ fontSize: "13px", color: "#6B6560" }}>
                   Expires {getTimeUntilExpiry(paste.expiresAt)}
+                </span>
+              )}
+              {burned && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "13px", color: "#C1512D", fontWeight: 600 }}>
+                  <Flame size={13} /> Burn-after-read
                 </span>
               )}
             </div>
@@ -223,7 +252,7 @@ export default function ViewPaste() {
           >
             <FileText size={13} /> {showRaw ? "Rendered" : "Raw"}
           </button>
-          {canDelete && (
+          {canDelete && !burned && (
             <button
               id="delete-paste-btn"
               onClick={handleDelete}
