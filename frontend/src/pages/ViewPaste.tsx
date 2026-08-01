@@ -41,8 +41,8 @@ export default function ViewPaste() {
   const navigate = useNavigate();
   const location = useLocation();
   const { remove, loading: deleting } = useDeletePaste();
-  const cancelledRef = useRef(false);
-  const fetchedRef = useRef(false);
+
+  const hasFetched = useRef(false);
 
   const [paste, setPaste] = useState<Paste | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,12 +55,11 @@ export default function ViewPaste() {
   const canDelete = !!deleteToken;
 
   useEffect(() => {
-    if (!id || fetchedRef.current) return;
-    fetchedRef.current = true;
-    cancelledRef.current = false;
+    if (!id) return;
+    if (hasFetched.current) return;
+    hasFetched.current = true;
 
     const statePaste = location.state?.paste as Paste | undefined;
-
     if (statePaste && statePaste.id === id) {
       setPaste(statePaste);
       setLoading(false);
@@ -68,10 +67,11 @@ export default function ViewPaste() {
     }
 
     setLoading(true);
+    let cancelled = false;
 
     pastesApi.getById(id)
       .then(({ paste: p, burned: b }) => {
-        if (cancelledRef.current) return;
+        if (cancelled) return;
         setPaste(p);
         setBurned(b);
         if (b) {
@@ -79,7 +79,7 @@ export default function ViewPaste() {
         }
       })
       .catch((err: Error & { code?: string; status?: number }) => {
-        if (cancelledRef.current) return;
+        if (cancelled) return;
         setError(err.message);
         setErrorCode((err as any).code ?? null);
         if ((err as any).code === "PASTE_EXPIRED") {
@@ -87,11 +87,11 @@ export default function ViewPaste() {
         }
       })
       .finally(() => {
-        if (!cancelledRef.current) setLoading(false);
+        if (!cancelled) setLoading(false);
       });
 
     return () => {
-      cancelledRef.current = true;
+      cancelled = true;
     };
   }, [id]);
 

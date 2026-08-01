@@ -58,6 +58,18 @@ export async function createPaste(input: CreatePasteInput) {
   };
 }
 
+type RawPasteRow = {
+  id: string;
+  title: string;
+  content: string;
+  language: string;
+  createdAt: Date;
+  expiresAt: Date | null;
+  viewCount: number;
+  burnAfterRead: boolean;
+  visibility: string;
+};
+
 export async function getPasteById(id: string) {
   logger.info({ id }, "Querying paste from database");
 
@@ -74,7 +86,58 @@ export async function getPasteById(id: string) {
     throw createError("Paste has expired", 410, "PASTE_EXPIRED");
   }
 
-  const responseData = {
+  if (paste.burnAfterRead) {
+    logger.info({ id }, "Burn-after-read paste accessed, attempting atomic read-and-delete");
+
+    const rows = await prisma.$queryRaw<RawPasteRow[]>`
+      DELETE FROM "Paste"
+      WHERE id = ${id} AND "burnAfterRead" = true
+      RETURNING
+        id,
+        title,
+        content,
+        language,
+        "createdAt",
+        "expiresAt",
+        "viewCount",
+        "burnAfterRead",
+        visibility
+    `;
+
+    if (rows.length === 0) {
+      logger.warn({ id }, "Burn-after-read paste already consumed by concurrent request");
+      throw createError("Paste already consumed", 410, "PASTE_ALREADY_CONSUMED");
+    }
+
+    const row = rows[0];
+
+    logger.info({ id }, "Burn-after-read paste consumed and deleted");
+
+    return {
+      paste: {
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        language: row.language,
+        createdAt: row.createdAt,
+        expiresAt: row.expiresAt,
+        viewCount: row.viewCount,
+        burnAfterRead: true,
+        visibility: row.visibility as "public" | "unlisted",
+      },
+      burned: true,
+    };
+  }
+
+  const updated = await prisma.paste.update({
+    where: { id },
+    data: { viewCount: { increment: 1 } },
+    select: { viewCount: true },
+  });
+
+  logger.info({ id, viewCount: updated.viewCount }, "Paste retrieved and view count incremented");
+
+  return {
     paste: {
       id: paste.id,
       title: paste.title,
@@ -82,25 +145,14 @@ export async function getPasteById(id: string) {
       language: paste.language,
       createdAt: paste.createdAt,
       expiresAt: paste.expiresAt,
-      viewCount: paste.viewCount,
-      burnAfterRead: paste.burnAfterRead,
+      viewCount: updated.viewCount,
+      burnAfterRead: false,
       visibility: paste.visibility as "public" | "unlisted",
     },
-    burned: paste.burnAfterRead,
+    burned: false,
   };
-
-  if (paste.burnAfterRead) {
-    logger.info({ id }, "Burn-after-read paste accessed, removing from database");
-    await prisma.paste.delete({ where: { id } });
-  } else {
-    await prisma.paste.update({
-      where: { id },
-      data: { viewCount: { increment: 1 } },
-    });
-  }
-
-  return responseData;
 }
+
 
 export async function listPublicPastes(input: ListPastesInput) {
   const { page, limit, sort } = input;
