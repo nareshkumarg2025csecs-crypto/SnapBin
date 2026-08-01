@@ -18,6 +18,4 @@ model Paste {
   burnAfterRead Boolean   @default(false)
   visibility    String    @default("public")
   deleteToken   String
-  viewPasswordHash String?
-  editPasswordHash String?
 }

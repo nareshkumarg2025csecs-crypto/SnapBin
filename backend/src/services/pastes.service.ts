@@ -1,8 +1,7 @@
 import { nanoid } from "nanoid";
-import bcrypt from "bcryptjs";
 import { prisma } from "../prisma/client";
 import { createError } from "../middleware/errorHandler";
-import { CreatePasteInput, ListPastesInput, UpdatePasteInput } from "../utils/schemas";
+import { CreatePasteInput, ListPastesInput } from "../utils/schemas";
 import { logger } from "../utils/logger";
 
 function computeExpiresAt(expiration: string): Date | null {
@@ -28,9 +27,6 @@ export async function createPaste(input: CreatePasteInput) {
   const deleteToken = nanoid(32);
   const expiresAt = computeExpiresAt(input.expiration ?? "never");
 
-  const viewPasswordHash = input.viewPassword ? await bcrypt.hash(input.viewPassword, 10) : null;
-  const editPasswordHash = input.editPassword ? await bcrypt.hash(input.editPassword, 10) : null;
-
   logger.info({ id, language: input.language, expiresAt, burnAfterRead: input.burnAfterRead }, "Inserting paste into database");
 
   const paste = await prisma.paste.create({
@@ -43,8 +39,6 @@ export async function createPaste(input: CreatePasteInput) {
       burnAfterRead: input.burnAfterRead === true,
       visibility: input.visibility || "public",
       deleteToken,
-      viewPasswordHash,
-      editPasswordHash,
     },
   });
 
@@ -60,13 +54,11 @@ export async function createPaste(input: CreatePasteInput) {
     viewCount: paste.viewCount,
     burnAfterRead: paste.burnAfterRead,
     visibility: paste.visibility as "public" | "unlisted",
-    hasViewPassword: paste.viewPasswordHash !== null,
-    hasEditPassword: paste.editPasswordHash !== null,
     deleteToken,
   };
 }
 
-export async function getPasteById(id: string, viewPassword?: string) {
+export async function getPasteById(id: string) {
   logger.info({ id }, "Querying paste from database");
 
   const paste = await prisma.paste.findUnique({ where: { id } });
@@ -74,16 +66,6 @@ export async function getPasteById(id: string, viewPassword?: string) {
   if (!paste) {
     logger.warn({ id }, "Paste not found in database");
     throw createError("Paste not found", 404, "PASTE_NOT_FOUND");
-  }
-
-  if (paste.viewPasswordHash !== null) {
-    if (!viewPassword) {
-      throw createError("View password required", 401, "VIEW_PASSWORD_REQUIRED");
-    }
-    const match = await bcrypt.compare(viewPassword, paste.viewPasswordHash || "");
-    if (!match) {
-      throw createError("Incorrect view password", 401, "INVALID_VIEW_PASSWORD");
-    }
   }
 
   if (paste.expiresAt && paste.expiresAt < new Date()) {
@@ -103,8 +85,6 @@ export async function getPasteById(id: string, viewPassword?: string) {
       viewCount: paste.viewCount,
       burnAfterRead: paste.burnAfterRead,
       visibility: paste.visibility as "public" | "unlisted",
-      hasViewPassword: paste.viewPasswordHash !== null,
-      hasEditPassword: paste.editPasswordHash !== null,
     },
     burned: paste.burnAfterRead,
   };
@@ -151,28 +131,16 @@ export async function listPublicPastes(input: ListPastesInput) {
         viewCount: true,
         visibility: true,
         burnAfterRead: true,
-        viewPasswordHash: true,
-        editPasswordHash: true,
       },
     }),
     prisma.paste.count({ where }),
   ]);
 
-  const mappedPastes = pastes.map(p => ({
-    id: p.id,
-    title: p.title,
-    language: p.language,
-    createdAt: p.createdAt,
-    expiresAt: p.expiresAt,
-    viewCount: p.viewCount,
-    visibility: p.visibility as "public" | "unlisted",
-    burnAfterRead: p.burnAfterRead,
-    hasViewPassword: p.viewPasswordHash !== null,
-    hasEditPassword: p.editPasswordHash !== null,
-  }));
-
   return {
-    pastes: mappedPastes,
+    pastes: pastes.map(p => ({
+      ...p,
+      visibility: p.visibility as "public" | "unlisted",
+    })),
     pagination: {
       page,
       limit,
@@ -181,46 +149,6 @@ export async function listPublicPastes(input: ListPastesInput) {
       hasNext: page * limit < total,
       hasPrev: page > 1,
     },
-  };
-}
-
-export async function updatePaste(id: string, input: UpdatePasteInput) {
-  const paste = await prisma.paste.findUnique({ where: { id } });
-
-  if (!paste) {
-    throw createError("Paste not found", 404, "PASTE_NOT_FOUND");
-  }
-
-  if (paste.editPasswordHash === null) {
-    throw createError("This paste is not editable", 403, "PASTE_NOT_EDITABLE");
-  }
-
-  const match = await bcrypt.compare(input.editPassword, paste.editPasswordHash || "");
-  if (!match) {
-    throw createError("Incorrect edit password", 401, "INVALID_EDIT_PASSWORD");
-  }
-
-  const updated = await prisma.paste.update({
-    where: { id },
-    data: {
-      title: input.title !== undefined ? (input.title || "Untitled Paste") : undefined,
-      content: input.content,
-      language: input.language,
-    },
-  });
-
-  return {
-    id: updated.id,
-    title: updated.title,
-    content: updated.content,
-    language: updated.language,
-    createdAt: updated.createdAt,
-    expiresAt: updated.expiresAt,
-    viewCount: updated.viewCount,
-    burnAfterRead: updated.burnAfterRead,
-    visibility: updated.visibility as "public" | "unlisted",
-    hasViewPassword: updated.viewPasswordHash !== null,
-    hasEditPassword: updated.editPasswordHash !== null,
   };
 }
 

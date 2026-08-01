@@ -44,8 +44,6 @@ export const createPasteSchema = z.object({
   expiration: z.enum(EXPIRATION_VALUES).default("never"),
   visibility: z.enum(["public", "unlisted"]).default("public"),
   burnAfterRead: z.boolean().default(false),
-  viewPassword: z.string().optional(),
-  editPassword: z.string().optional(),
 });
 
 export const listPastesSchema = z.object({
@@ -54,13 +52,5 @@ export const listPastesSchema = z.object({
   sort: z.enum(["newest", "most_viewed"]).default("newest"),
 });
 
-export const updatePasteSchema = z.object({
-  title: z.string().max(200).optional(),
-  content: z.string().min(1, "Content cannot be empty").max(500000, "Content exceeds 500KB limit").optional(),
-  language: z.enum(SUPPORTED_LANGUAGES).optional(),
-  editPassword: z.string().min(1, "Edit password is required"),
-});
-
 export type CreatePasteInput = z.infer<typeof createPasteSchema>;
 export type ListPastesInput = z.infer<typeof listPastesSchema>;
-export type UpdatePasteInput = z.infer<typeof updatePasteSchema>;
