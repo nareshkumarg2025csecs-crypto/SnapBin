@@ -29,9 +29,7 @@ export async function createPaste(input: CreatePasteInput) {
   const expiresAt = computeExpiresAt(input.expiration ?? "never");
 
   const viewPasswordHash = input.viewPassword ? await bcrypt.hash(input.viewPassword, 10) : null;
-  const hasViewPassword = !!input.viewPassword;
   const editPasswordHash = input.editPassword ? await bcrypt.hash(input.editPassword, 10) : null;
-  const hasEditPassword = !!input.editPassword;
 
   logger.info({ id, language: input.language, expiresAt, burnAfterRead: input.burnAfterRead }, "Inserting paste into database");
 
@@ -47,8 +45,6 @@ export async function createPaste(input: CreatePasteInput) {
       deleteToken,
       viewPasswordHash,
       editPasswordHash,
-      hasViewPassword,
-      hasEditPassword,
     },
   });
 
@@ -64,8 +60,8 @@ export async function createPaste(input: CreatePasteInput) {
     viewCount: paste.viewCount,
     burnAfterRead: paste.burnAfterRead,
     visibility: paste.visibility as "public" | "unlisted",
-    hasViewPassword: paste.hasViewPassword,
-    hasEditPassword: paste.hasEditPassword,
+    hasViewPassword: paste.viewPasswordHash !== null,
+    hasEditPassword: paste.editPasswordHash !== null,
     deleteToken,
   };
 }
@@ -80,7 +76,7 @@ export async function getPasteById(id: string, viewPassword?: string) {
     throw createError("Paste not found", 404, "PASTE_NOT_FOUND");
   }
 
-  if (paste.hasViewPassword) {
+  if (paste.viewPasswordHash !== null) {
     if (!viewPassword) {
       throw createError("View password required", 401, "VIEW_PASSWORD_REQUIRED");
     }
@@ -107,8 +103,8 @@ export async function getPasteById(id: string, viewPassword?: string) {
       viewCount: paste.viewCount,
       burnAfterRead: paste.burnAfterRead,
       visibility: paste.visibility as "public" | "unlisted",
-      hasViewPassword: paste.hasViewPassword,
-      hasEditPassword: paste.hasEditPassword,
+      hasViewPassword: paste.viewPasswordHash !== null,
+      hasEditPassword: paste.editPasswordHash !== null,
     },
     burned: paste.burnAfterRead,
   };
@@ -155,15 +151,28 @@ export async function listPublicPastes(input: ListPastesInput) {
         viewCount: true,
         visibility: true,
         burnAfterRead: true,
-        hasViewPassword: true,
-        hasEditPassword: true,
+        viewPasswordHash: true,
+        editPasswordHash: true,
       },
     }),
     prisma.paste.count({ where }),
   ]);
 
+  const mappedPastes = pastes.map(p => ({
+    id: p.id,
+    title: p.title,
+    language: p.language,
+    createdAt: p.createdAt,
+    expiresAt: p.expiresAt,
+    viewCount: p.viewCount,
+    visibility: p.visibility as "public" | "unlisted",
+    burnAfterRead: p.burnAfterRead,
+    hasViewPassword: p.viewPasswordHash !== null,
+    hasEditPassword: p.editPasswordHash !== null,
+  }));
+
   return {
-    pastes,
+    pastes: mappedPastes,
     pagination: {
       page,
       limit,
@@ -182,7 +191,7 @@ export async function updatePaste(id: string, input: UpdatePasteInput) {
     throw createError("Paste not found", 404, "PASTE_NOT_FOUND");
   }
 
-  if (!paste.hasEditPassword) {
+  if (paste.editPasswordHash === null) {
     throw createError("This paste is not editable", 403, "PASTE_NOT_EDITABLE");
   }
 
@@ -210,8 +219,8 @@ export async function updatePaste(id: string, input: UpdatePasteInput) {
     viewCount: updated.viewCount,
     burnAfterRead: updated.burnAfterRead,
     visibility: updated.visibility as "public" | "unlisted",
-    hasViewPassword: updated.hasViewPassword,
-    hasEditPassword: updated.hasEditPassword,
+    hasViewPassword: updated.viewPasswordHash !== null,
+    hasEditPassword: updated.editPasswordHash !== null,
   };
 }
 
