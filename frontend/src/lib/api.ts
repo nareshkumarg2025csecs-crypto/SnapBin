@@ -87,7 +87,7 @@ export const pastesApi = {
     return response.data.data;
   },
 
-  list: async (params: { page?: number; limit?: number; sort?: "newest" | "most_viewed" }) => {
+  list: async (params: { page?: number; limit?: number; sort?: "newest" | "most_viewed"; search?: string }) => {
     const response = await api.get<{
       status: string;
       data: { pastes: PasteListItem[]; pagination: PaginationMeta };

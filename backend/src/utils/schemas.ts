@@ -50,6 +50,7 @@ export const listPastesSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20),
   sort: z.enum(["newest", "most_viewed"]).default("newest"),
+  search: z.string().optional(),
 });
 
 export type CreatePasteInput = z.infer<typeof createPasteSchema>;

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { Loader2, TrendingUp, Clock, LayoutGrid } from "lucide-react";
+import { Loader2, TrendingUp, Clock, LayoutGrid, Search, X } from "lucide-react";
 import { pastesApi, PasteListItem, PaginationMeta } from "../lib/api";
 import PasteCard from "../components/PasteCard";
 
@@ -12,9 +12,30 @@ export default function Browse() {
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<SortOption>("newest");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 400);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchQuery]);
+
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setPage(1);
+  }, [debouncedSearchQuery]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -22,7 +43,7 @@ export default function Browse() {
     setError(null);
 
     pastesApi
-      .list({ page, limit: 20, sort })
+      .list({ page, limit: 20, sort, search: debouncedSearchQuery || undefined })
       .then(({ pastes: p, pagination: pg }) => {
         if (cancelledRef.current) return;
         setPastes(p);
@@ -39,7 +60,7 @@ export default function Browse() {
     return () => {
       cancelledRef.current = true;
     };
-  }, [page, sort]);
+  }, [page, sort, debouncedSearchQuery]);
 
   const handleSortChange = (newSort: SortOption) => {
     if (newSort === sort) return;
@@ -47,43 +68,90 @@ export default function Browse() {
     setPage(1);
   };
 
+  const handleClearSearch = () => {
+    setSearchQuery("");
+    setDebouncedSearchQuery("");
+    setPage(1);
+  };
+
   return (
     <div className="container-app" style={{ paddingTop: "40px", paddingBottom: "40px" }}>
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: "16px", marginBottom: "32px" }}>
-          <div>
-            <span className="section-label">Public Pastes</span>
-            <h1 style={{ fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 900, color: "#111111", letterSpacing: "-0.03em", marginTop: "8px" }}>
-              Explore
-            </h1>
-            {pagination && (
-              <p style={{ fontSize: "14px", color: "#6B6560", marginTop: "4px" }}>
-                {pagination.total.toLocaleString()} public pastes
-              </p>
-            )}
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px", marginBottom: "32px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: "16px" }}>
+            <div>
+              <span className="section-label">Public Pastes</span>
+              <h1 style={{ fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 900, color: "#111111", letterSpacing: "-0.03em", marginTop: "8px" }}>
+                Explore
+              </h1>
+              {pagination && (
+                <p style={{ fontSize: "14px", color: "#6B6560", marginTop: "4px" }}>
+                  {pagination.total.toLocaleString()} public pastes
+                </p>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              {(
+                [
+                  { value: "newest", label: "Newest", icon: <Clock size={13} /> },
+                  { value: "most_viewed", label: "Most Viewed", icon: <TrendingUp size={13} /> },
+                ] as { value: SortOption; label: string; icon: React.ReactNode }[]
+              ).map((option) => (
+                <button
+                  key={option.value}
+                  id={`sort-${option.value}`}
+                  onClick={() => handleSortChange(option.value)}
+                  className="btn-ghost"
+                  style={{
+                    fontSize: "13px",
+                    padding: "8px 14px",
+                    ...(sort === option.value ? { borderColor: "#C1512D", color: "#C1512D", backgroundColor: "rgba(193,81,45,0.08)" } : {}),
+                  }}
+                >
+                  {option.icon} {option.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div style={{ display: "flex", gap: "8px" }}>
-            {(
-              [
-                { value: "newest", label: "Newest", icon: <Clock size={13} /> },
-                { value: "most_viewed", label: "Most Viewed", icon: <TrendingUp size={13} /> },
-              ] as { value: SortOption; label: string; icon: React.ReactNode }[]
-            ).map((option) => (
+          <div style={{ position: "relative", width: "100%", maxWidth: "480px" }}>
+            <Search size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+            <input
+              type="text"
+              placeholder="Search pastes by title..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input-field"
+              style={{
+                paddingLeft: "42px",
+                paddingRight: searchQuery ? "42px" : "16px",
+                backgroundColor: "var(--bg-alt)",
+                border: "1px solid var(--border)",
+                fontSize: "14px",
+              }}
+            />
+            {searchQuery && (
               <button
-                key={option.value}
-                id={`sort-${option.value}`}
-                onClick={() => handleSortChange(option.value)}
-                className="btn-ghost"
+                onClick={handleClearSearch}
                 style={{
-                  fontSize: "13px",
-                  padding: "8px 14px",
-                  ...(sort === option.value ? { borderColor: "#C1512D", color: "#C1512D", backgroundColor: "rgba(193,81,45,0.08)" } : {}),
+                  position: "absolute",
+                  right: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-muted)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "4px",
                 }}
               >
-                {option.icon} {option.label}
+                <X size={16} />
               </button>
-            ))}
+            )}
           </div>
         </div>
 
@@ -104,9 +172,19 @@ export default function Browse() {
             <div style={{ width: "64px", height: "64px", borderRadius: "16px", backgroundColor: "#F0ECE5", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
               <LayoutGrid size={28} style={{ color: "#6B6560" }} />
             </div>
-            <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#111111", marginBottom: "8px" }}>No public pastes yet</h2>
-            <p style={{ fontSize: "14px", color: "#6B6560", marginBottom: "24px" }}>Be the first to share something.</p>
-            <Link to="/create" className="btn-primary">Create the First Paste</Link>
+            {debouncedSearchQuery ? (
+              <>
+                <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#111111", marginBottom: "8px" }}>No pastes match your search</h2>
+                <p style={{ fontSize: "14px", color: "#6B6560", marginBottom: "24px" }}>Try searching with a different term.</p>
+                <button onClick={handleClearSearch} className="btn-primary">Clear Search</button>
+              </>
+            ) : (
+              <>
+                <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#111111", marginBottom: "8px" }}>No public pastes yet</h2>
+                <p style={{ fontSize: "14px", color: "#6B6560", marginBottom: "24px" }}>Be the first to share something.</p>
+                <Link to="/create" className="btn-primary">Create the First Paste</Link>
+              </>
+            )}
           </div>
         )}
 

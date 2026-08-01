@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma/client";
 import { createError } from "../middleware/errorHandler";
 import { CreatePasteInput, ListPastesInput } from "../utils/schemas";
@@ -155,7 +156,7 @@ export async function getPasteById(id: string) {
 
 
 export async function listPublicPastes(input: ListPastesInput) {
-  const { page, limit, sort } = input;
+  const { page, limit, sort, search } = input;
   const skip = (page - 1) * limit;
 
   const orderBy =
@@ -163,10 +164,17 @@ export async function listPublicPastes(input: ListPastesInput) {
       ? { viewCount: "desc" as const }
       : { createdAt: "desc" as const };
 
-  const where = {
+  const where: Prisma.PasteWhereInput = {
     visibility: "public",
     OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
   };
+
+  if (search) {
+    where.title = {
+      contains: search,
+      mode: "insensitive",
+    };
+  }
 
   const [pastes, total] = await Promise.all([
     prisma.paste.findMany({

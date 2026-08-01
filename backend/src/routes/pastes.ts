@@ -56,6 +56,10 @@ router.post("/", createPasteRateLimiter, validate(createPasteSchema), createPast
  *       - in: query
  *         name: sort
  *         schema: { type: string, enum: [newest, most_viewed], default: newest }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Search query matching paste titles
  *     responses:
  *       200:
  *         description: Paginated list of public pastes
