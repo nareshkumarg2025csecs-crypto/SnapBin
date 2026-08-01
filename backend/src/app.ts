@@ -16,7 +16,19 @@ app.set("trust proxy", 1);
 
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN ?? "*",
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+      const allowedOrigin = process.env.CORS_ORIGIN;
+      if (allowedOrigin && origin === allowedOrigin) {
+        return callback(null, true);
+      }
+      if (/^https:\/\/([a-zA-Z0-9-]+\.)*vercel\.app$/.test(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "X-Delete-Token", "X-View-Password"],
   })
