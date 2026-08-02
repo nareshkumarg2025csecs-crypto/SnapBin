@@ -42,6 +42,10 @@ export default function CreatePaste() {
   const [expiration, setExpiration] = useState<Expiration>("never");
   const [visibility, setVisibility] = useState<"public" | "unlisted">("public");
   const [burnAfterRead, setBurnAfterRead] = useState<boolean>(false);
+  const [viewPassword, setViewPassword] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [showViewPassword, setShowViewPassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
 
   const handleSubmit = async () => {
     if (!content.trim()) {
@@ -59,6 +63,8 @@ export default function CreatePaste() {
         expiration,
         visibility,
         burnAfterRead,
+        viewPassword: viewPassword || undefined,
+        editPassword: editPassword || undefined,
       };
 
       const response = await create(data);
@@ -251,6 +257,76 @@ export default function CreatePaste() {
                       }} />
                     </div>
                   </button>
+                </div>
+
+                <div>
+                  <label htmlFor="view-password" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#6B6560", marginBottom: "6px" }}>
+                    View Password (Optional)
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      id="view-password"
+                      type={showViewPassword ? "text" : "password"}
+                      placeholder="Enter view password"
+                      value={viewPassword}
+                      onChange={(e) => setViewPassword(e.target.value)}
+                      className="input-field"
+                      style={{ paddingRight: "40px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowViewPassword(!showViewPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "12px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "#6B6560",
+                        display: "flex",
+                        alignItems: "center"
+                      }}
+                    >
+                      {showViewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="edit-password" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#6B6560", marginBottom: "6px" }}>
+                    Edit Password (Optional)
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      id="edit-password"
+                      type={showEditPassword ? "text" : "password"}
+                      placeholder="Enter edit password"
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      className="input-field"
+                      style={{ paddingRight: "40px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowEditPassword(!showEditPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "12px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "#6B6560",
+                        display: "flex",
+                        alignItems: "center"
+                      }}
+                    >
+                      {showEditPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

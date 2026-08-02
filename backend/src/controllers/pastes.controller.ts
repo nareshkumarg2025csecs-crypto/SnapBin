@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import * as pastesService from "../services/pastes.service";
-import { CreatePasteInput, ListPastesInput } from "../utils/schemas";
+import { CreatePasteInput, ListPastesInput, UpdatePasteInput } from "../utils/schemas";
 import { logger } from "../utils/logger";
 
 export async function createPaste(
@@ -18,6 +18,8 @@ export async function createPaste(
         expiration: input.expiration,
         visibility: input.visibility,
         burnAfterRead: input.burnAfterRead,
+        hasViewPassword: input.viewPassword !== undefined && input.viewPassword !== "",
+        hasEditPassword: input.editPassword !== undefined && input.editPassword !== "",
       },
     }, "Paste creation request payload");
 
@@ -39,9 +41,11 @@ export async function getPaste(
 ): Promise<void> {
   try {
     const { id } = req.params;
-    logger.info({ id }, "Paste retrieval request");
+    const viewPassword = req.headers["x-view-password"] as string | undefined;
 
-    const result = await pastesService.getPasteById(id);
+    logger.info({ id, hasViewPassword: viewPassword !== undefined && viewPassword !== "" }, "Paste retrieval request");
+
+    const result = await pastesService.getPasteById(id, viewPassword);
 
     logger.info({ id, burned: result.burned, viewCount: result.paste.viewCount }, "Paste retrieved successfully");
 
@@ -102,6 +106,35 @@ export async function deletePaste(
     });
   } catch (err) {
     logger.error({ err, id: req.params.id }, "Failed to delete paste");
+    next(err);
+  }
+}
+
+export async function updatePaste(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    const input = req.body as UpdatePasteInput;
+
+    logger.info({
+      id,
+      payload: {
+        title: input.title,
+        language: input.language,
+        hasEditPassword: input.editPassword !== undefined && input.editPassword !== "",
+      },
+    }, "Paste update request payload");
+
+    const result = await pastesService.updatePaste(id, input);
+
+    logger.info({ id: result.id }, "Paste updated successfully");
+
+    res.status(200).json(result);
+  } catch (err) {
+    logger.error({ err, id: req.params.id }, "Failed to update paste");
     next(err);
   }
 }

@@ -2,8 +2,9 @@ import { nanoid } from "nanoid";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma/client";
 import { createError } from "../middleware/errorHandler";
-import { CreatePasteInput, ListPastesInput } from "../utils/schemas";
+import { CreatePasteInput, ListPastesInput, UpdatePasteInput } from "../utils/schemas";
 import { logger } from "../utils/logger";
+import bcrypt from "bcryptjs";
 
 function computeExpiresAt(expiration: string): Date | null {
   const now = new Date();
@@ -28,6 +29,16 @@ export async function createPaste(input: CreatePasteInput) {
   const deleteToken = nanoid(32);
   const expiresAt = computeExpiresAt(input.expiration ?? "never");
 
+  let viewPasswordHash: string | null = null;
+  if (input.viewPassword) {
+    viewPasswordHash = await bcrypt.hash(input.viewPassword, 10);
+  }
+
+  let editPasswordHash: string | null = null;
+  if (input.editPassword) {
+    editPasswordHash = await bcrypt.hash(input.editPassword, 10);
+  }
+
   logger.info({ id, language: input.language, expiresAt, burnAfterRead: input.burnAfterRead }, "Inserting paste into database");
 
   const paste = await prisma.paste.create({
@@ -40,6 +51,8 @@ export async function createPaste(input: CreatePasteInput) {
       burnAfterRead: input.burnAfterRead === true,
       visibility: input.visibility || "public",
       deleteToken,
+      viewPasswordHash,
+      editPasswordHash,
     },
   });
 
@@ -56,22 +69,12 @@ export async function createPaste(input: CreatePasteInput) {
     burnAfterRead: paste.burnAfterRead,
     visibility: paste.visibility as "public" | "unlisted",
     deleteToken,
+    hasViewPassword: paste.viewPasswordHash !== null,
+    hasEditPassword: paste.editPasswordHash !== null,
   };
 }
 
-type RawPasteRow = {
-  id: string;
-  title: string;
-  content: string;
-  language: string;
-  createdAt: Date;
-  expiresAt: Date | null;
-  viewCount: number;
-  burnAfterRead: boolean;
-  visibility: string;
-};
-
-export async function getPasteById(id: string) {
+export async function getPasteById(id: string, viewPassword?: string) {
   logger.info({ id }, "Querying paste from database");
 
   const paste = await prisma.paste.findUnique({ where: { id } });
@@ -87,23 +90,23 @@ export async function getPasteById(id: string) {
     throw createError("Paste has expired", 410, "PASTE_EXPIRED");
   }
 
+  if (paste.viewPasswordHash !== null) {
+    if (!viewPassword) {
+      throw createError("View password required", 401, "VIEW_PASSWORD_REQUIRED");
+    }
+    const isMatch = await bcrypt.compare(viewPassword, paste.viewPasswordHash);
+    if (!isMatch) {
+      throw createError("Invalid view password", 401, "INVALID_VIEW_PASSWORD");
+    }
+  }
+
   if (paste.burnAfterRead) {
     logger.info({ id }, "Burn-after-read paste accessed, attempting atomic read-and-delete");
 
-    const rows = await prisma.$queryRaw<RawPasteRow[]>`
-      DELETE FROM "Paste"
-      WHERE id = ${id} AND "burnAfterRead" = true
-      RETURNING
-        id,
-        title,
-        content,
-        language,
-        "createdAt",
-        "expiresAt",
-        "viewCount",
-        "burnAfterRead",
-        visibility
-    `;
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `DELETE FROM "Paste" WHERE id = $1 AND "burnAfterRead" = true RETURNING *`,
+      id
+    );
 
     if (rows.length === 0) {
       logger.warn({ id }, "Burn-after-read paste already consumed by concurrent request");
@@ -125,6 +128,8 @@ export async function getPasteById(id: string) {
         viewCount: row.viewCount,
         burnAfterRead: true,
         visibility: row.visibility as "public" | "unlisted",
+        hasViewPassword: row.viewPasswordHash !== null,
+        hasEditPassword: row.editPasswordHash !== null,
       },
       burned: true,
     };
@@ -149,11 +154,12 @@ export async function getPasteById(id: string) {
       viewCount: updated.viewCount,
       burnAfterRead: false,
       visibility: paste.visibility as "public" | "unlisted",
+      hasViewPassword: paste.viewPasswordHash !== null,
+      hasEditPassword: paste.editPasswordHash !== null,
     },
     burned: false,
   };
 }
-
 
 export async function listPublicPastes(input: ListPastesInput) {
   const { page, limit, sort, search } = input;
@@ -191,6 +197,8 @@ export async function listPublicPastes(input: ListPastesInput) {
         viewCount: true,
         visibility: true,
         burnAfterRead: true,
+        viewPasswordHash: true,
+        editPasswordHash: true,
       },
     }),
     prisma.paste.count({ where }),
@@ -198,8 +206,16 @@ export async function listPublicPastes(input: ListPastesInput) {
 
   return {
     pastes: pastes.map(p => ({
-      ...p,
+      id: p.id,
+      title: p.title,
+      language: p.language,
+      createdAt: p.createdAt,
+      expiresAt: p.expiresAt,
+      viewCount: p.viewCount,
       visibility: p.visibility as "public" | "unlisted",
+      burnAfterRead: p.burnAfterRead,
+      hasViewPassword: p.viewPasswordHash !== null,
+      hasEditPassword: p.editPasswordHash !== null,
     })),
     pagination: {
       page,
@@ -225,4 +241,49 @@ export async function deletePaste(id: string, deleteToken: string) {
 
   await prisma.paste.delete({ where: { id } });
   logger.info({ id }, "Paste deleted from database");
+}
+
+export async function updatePaste(id: string, input: UpdatePasteInput) {
+  const paste = await prisma.paste.findUnique({ where: { id } });
+
+  if (!paste) {
+    throw createError("Paste not found", 404, "PASTE_NOT_FOUND");
+  }
+
+  if (paste.expiresAt && paste.expiresAt < new Date()) {
+    await prisma.paste.delete({ where: { id } });
+    throw createError("Paste has expired", 410, "PASTE_EXPIRED");
+  }
+
+  if (paste.editPasswordHash === null) {
+    throw createError("Paste is not editable", 403, "PASTE_NOT_EDITABLE");
+  }
+
+  const isMatch = await bcrypt.compare(input.editPassword, paste.editPasswordHash);
+  if (!isMatch) {
+    throw createError("Invalid edit password", 401, "INVALID_EDIT_PASSWORD");
+  }
+
+  const updated = await prisma.paste.update({
+    where: { id },
+    data: {
+      title: input.title !== undefined ? input.title : undefined,
+      content: input.content !== undefined ? input.content : undefined,
+      language: input.language !== undefined ? input.language : undefined,
+    },
+  });
+
+  return {
+    id: updated.id,
+    title: updated.title,
+    content: updated.content,
+    language: updated.language,
+    createdAt: updated.createdAt,
+    expiresAt: updated.expiresAt,
+    viewCount: updated.viewCount,
+    burnAfterRead: updated.burnAfterRead,
+    visibility: updated.visibility as "public" | "unlisted",
+    hasViewPassword: updated.viewPasswordHash !== null,
+    hasEditPassword: updated.editPasswordHash !== null,
+  };
 }

@@ -38,6 +38,8 @@ export interface Paste {
   viewCount: number;
   burnAfterRead: boolean;
   visibility: "public" | "unlisted";
+  hasViewPassword: boolean;
+  hasEditPassword: boolean;
 }
 
 export interface PasteListItem {
@@ -49,6 +51,8 @@ export interface PasteListItem {
   viewCount: number;
   burnAfterRead: boolean;
   visibility: "public" | "unlisted";
+  hasViewPassword: boolean;
+  hasEditPassword: boolean;
 }
 
 export interface CreatePastePayload {
@@ -58,6 +62,8 @@ export interface CreatePastePayload {
   expiration?: "10m" | "1h" | "1d" | "1w" | "never";
   visibility?: "public" | "unlisted";
   burnAfterRead?: boolean;
+  viewPassword?: string;
+  editPassword?: string;
 }
 
 export interface CreatePasteResult extends Paste {
@@ -79,11 +85,15 @@ export const pastesApi = {
     return response.data;
   },
 
-  getById: async (id: string): Promise<{ paste: Paste; burned: boolean }> => {
+  getById: async (id: string, viewPassword?: string): Promise<{ paste: Paste; burned: boolean }> => {
+    const headers: Record<string, string> = {};
+    if (viewPassword) {
+      headers["X-View-Password"] = viewPassword;
+    }
     const response = await api.get<{
       status: string;
       data: { paste: Paste; burned: boolean };
-    }>(`/pastes/${id}`);
+    }>(`/pastes/${id}`, { headers });
     return response.data.data;
   },
 
@@ -99,6 +109,14 @@ export const pastesApi = {
     await api.delete(`/pastes/${id}`, {
       headers: { "X-Delete-Token": deleteToken },
     });
+  },
+
+  update: async (
+    id: string,
+    payload: { editPassword: string; title?: string; content?: string; language?: string }
+  ): Promise<Paste> => {
+    const response = await api.put<Paste>(`/pastes/${id}`, payload);
+    return response.data;
   },
 
   health: async () => {

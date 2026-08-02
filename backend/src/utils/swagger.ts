@@ -33,6 +33,8 @@ const options: swaggerJsdoc.Options = {
             viewCount: { type: "integer", example: 42 },
             burnAfterRead: { type: "boolean", example: false },
             visibility: { type: "string", enum: ["public", "unlisted"] },
+            hasViewPassword: { type: "boolean", example: false },
+            hasEditPassword: { type: "boolean", example: false },
           },
         },
         CreatePasteRequest: {
@@ -53,6 +55,8 @@ const options: swaggerJsdoc.Options = {
               default: "public",
             },
             burnAfterRead: { type: "boolean", default: false },
+            viewPassword: { type: "string" },
+            editPassword: { type: "string" },
           },
         },
         CreatePasteResponse: {
